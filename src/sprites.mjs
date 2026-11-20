@@ -103,7 +103,8 @@ export function createSprites(T, ctx, { rect, oval, circle, poly, line, strokeRe
     const image = images.get(name);
     if (image) {
       oval(x+25,y+42,18,5,'#233d3555');
-      paint(image,x+T/2,y+T-2,T+3,name === 'ore' ? T-7 : T+11);
+      const size = name === 'ore' ? T : T*1.45;
+      paint(image,x+T/2,y+T-2,size,size);
       return;
     }
     if(n.type==='tree'){

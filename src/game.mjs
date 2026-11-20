@@ -7,7 +7,7 @@ let ctx=canvas.getContext('2d',{alpha:false}),mini=document.getElementById('mini
 const el=id=>document.getElementById(id),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rand=(x,y,z=0)=>{let n=Math.sin(x*127.1+y*311.7+z*47.2)*43758.5453;return n-Math.floor(n)};
 const TYPES={worker:{name:'Worker',icon:'🧑‍🌾',hp:58,speed:2.7,damage:4,range:.8,cooldown:1.2,food:1,costG:60,costW:0,train:6},guard:{name:'Swordsman',icon:'⚔️',hp:115,speed:2.5,damage:17,range:1.0,cooldown:1.05,food:2,costG:75,costW:20,train:8},archer:{name:'Ranger',icon:'🏹',hp:67,speed:2.75,damage:11,range:4.1,cooldown:1.3,food:2,costG:95,costW:45,train:10},raider:{name:'Crimson Raider',icon:'🪓',hp:84,speed:2.25,damage:11,range:.9,cooldown:1.25,food:1,costG:55,costW:10,train:9},shooter:{name:'Crimson Bowman',icon:'🏹',hp:66,speed:2.4,damage:9,range:3.6,cooldown:1.45,food:2,costG:70,costW:30,train:11}};
 const BT={keep:{name:'Keep',icon:'🏰',w:3,h:3,hp:730,food:12,costG:300,costW:250,build:20},barracks:{name:'Barracks',icon:'🏘️',w:3,h:2,hp:375,costG:120,costW:160,build:8},farm:{name:'Farm',icon:'🌾',w:2,h:2,hp:180,costG:35,costW:85,build:5,food:6},tower:{name:'Watchtower',icon:'🗼',w:1,h:1,hp:235,costG:105,costW:120,build:7,damage:15,range:5.0,cooldown:1.2}};
-let units=[],buildings=[],nodes=[],objects=[],effects=[],idCounter=1,world=[],explored=[],visible=[],gold=350,wood=260,selected=[],placement=null,gameState='intro',gameTime=0,raidTime=65,wave=0,uid=0,toastUntil=0,toastText='',lastUI=0,lastFog=0,lastAI=0,cam={x:2,y:7},scale=1,viewW=0,viewH=0,devicePixel=1,lastFrame=0,pointer=null,miniPointer=false,story={barracks:false,army:false},lastDamageSound=0;
+let units=[],buildings=[],nodes=[],objects=[],effects=[],idCounter=1,world=[],explored=[],visible=[],gold=350,wood=260,selected=[],placement=null,gameState='intro',gameTime=0,raidTime=65,wave=0,uid=0,toastUntil=0,toastText='',lastUI=0,lastFog=0,lastAI=0,cam={x:2,y:7},scale=1.35,viewW=0,viewH=0,devicePixel=1,lastFrame=0,pointer=null,miniPointer=false,story={barracks:false,army:false},lastDamageSound=0;
 let redStock = { gold: 220, wood: 180 };
 let blockedGrid;
 function id(){return idCounter++}function building(team,type,x,y,under=false){const t=BT[type],b={id:id(),kind:'building',team,type,x,y,w:t.w,h:t.h,hp:t.hp,maxHp:t.hp,under,progress:under?0:1,queue:[],trainLeft:0,attackTimer:0};buildings.push(b);blockedGrid=null;return b}
@@ -138,17 +138,30 @@ function actionPicture(action) {
   if (verb === 'train' || verb === 'build') return `<img alt="" src="./art/${type}.webp">`;
   return action.icon;
 }
+function resourceCost(cost) {
+  return cost.replaceAll('🪙', '<img src="./art/gold.webp" alt="Gold ">').replaceAll('🪵', '<img src="./art/wood.webp" alt="Wood ">');
+}
 function updateUI(){const entities=selEntities();el('gold').textContent=Math.floor(gold);el('wood').textContent=Math.floor(wood);el('pop').textContent=`${popUsed()}/${popMax()}`;
 let name='🌿 Your frontier awaits',status='Select a worker to harvest wood or ore.',health=100,one=entities.length===1?entities[0]:null;
-if(entities.length>1){name=`⚔️ ${entities.length} units selected`;status=`${entities.filter(u=>u.type==='worker').length} workers · ${entities.filter(u=>u.type!=='worker').length} fighters`;health=entities.reduce((sum,u)=>sum+u.hp/u.maxHp,0)/entities.length*100}
-else if(one){const desc=one.kind==='unit'?TYPES[one.type]:BT[one.type];name=`${desc.icon} ${one.team==='red'?'Crimson ':''}${desc.name}`;health=one.hp/one.maxHp*100;if(one.kind==='unit'){status=`HP ${Math.ceil(one.hp)}/${one.maxHp}`+(one.carry?` · Carrying ${one.carry} ${one.carryType}`:'')+(one.order?.kind?` · ${one.order.kind}`:' · Standing by')}else{status=one.under?`Building · ${Math.round(one.progress*100)}% complete`:`HP ${Math.ceil(one.hp)}/${one.maxHp}`+(one.queue.length?` · Training ${one.queue.length} (${Math.ceil(one.trainLeft)}s)`:'')}}
+if(entities.length>1){name=`${entities.length} units selected`;status=`${entities.filter(u=>u.type==='worker').length} workers · ${entities.filter(u=>u.type!=='worker').length} fighters`;health=entities.reduce((sum,u)=>sum+u.hp/u.maxHp,0)/entities.length*100}
+else if(one){const desc=one.kind==='unit'?TYPES[one.type]:BT[one.type];name=`${one.team==='red'?'Crimson ':''}${desc.name}`;health=one.hp/one.maxHp*100;if(one.kind==='unit'){status=`HP ${Math.ceil(one.hp)}/${one.maxHp}`+(one.carry?` · Carrying ${one.carry} ${one.carryType}`:'')+(one.order?.kind?` · ${one.order.kind}`:' · Standing by')}else{status=one.under?`Building · ${Math.round(one.progress*100)}% complete`:`HP ${Math.ceil(one.hp)}/${one.maxHp}`+(one.queue.length?` · Training ${one.queue.length} (${Math.ceil(one.trainLeft)}s)`:'')}}
+const subject = one || entities[0];
+const portrait = subject?.type === 'worker' ? 'worker-portrait' : subject?.type === 'guard' ? 'guard-portrait' : subject?.type || 'keep';
+const portraitUrl = './art/' + portrait + '.webp';
+if (el('portrait').dataset.art !== portrait) {
+  el('portrait').src = portraitUrl;
+  el('portrait').dataset.art = portrait;
+}
+el('healthValue').textContent = one ? Math.ceil(one.hp)+'/'+one.maxHp : entities.length ? Math.round(health)+'%' : '';
+el('health').style.visibility = entities.length ? 'visible' : 'hidden';
+if (one) status = status.replace(/^HP [\d/]+ ·?\s*/, '') || 'Standing by';
 el('selectedName').textContent=name;el('selectedStatus').textContent=status;el('healthfill').style.width=clamp(health,0,100)+'%';el('healthfill').style.background=health<30?'#e07359':health<60?'#e5c16a':'#98d481';
 const acts=[];function add(key,label,icon,cost='',disabled=false,extra=''){acts.push({key,label,icon,cost,disabled,extra})}if(placement){add('cancel','Cancel','✖️','',false,'special active')}
 else if(!one&&entities.length===0){add('hint','Select units','👆','Tap on map',true);add('hint','Scout east','🧭','Find enemy camp',true)}
 else if((one?.kind==='unit'&&one.type==='worker')||(entities.length>1&&entities.some(e=>e.type==='worker'))){for(const type of ['barracks','farm','tower','keep']){let b=BT[type];add('build:'+type,b.name,b.icon,`🪙${b.costG} 🪵${b.costW}`,!canAfford(b))}add('stop','Stop','✋','Hold position')}
 else if(one?.kind==='building'){if(one.type==='keep')add('train:worker','Worker','🧑‍🌾',`🪙${TYPES.worker.costG}`,one.under||popUsed()+1>popMax()||!canAfford(TYPES.worker));if(one.type==='barracks'){for(const type of ['guard','archer']){let t=TYPES[type];add('train:'+type,t.name,t.icon,`🪙${t.costG} 🪵${t.costW}`,one.under||popUsed()+t.food>popMax()||!canAfford(t))}}if(one.type==='farm')add('hint','Housing','🌾','+6 supply',true);if(one.type==='tower')add('hint','Defense','🎯','Auto attacks',true);if(one.under)add('hint','Building','🪚','Assign workers',true);add('focus','Center','🎯','Locate')}
 else{add('stop','Stop','✋','Hold position');add('attackMove','Attack move','⚔️','Tap destination',false,attackMove?'active':'')}
-const target=el('actions');const markup=acts.map(a=>`<button class="action ${a.extra||''}" data-action="${a.key}" ${a.disabled?'disabled':''}><span class="picture">${actionPicture(a)}</span><span class="title">${a.label}</span><span class="cost">${a.cost}</span></button>`).join('');if(target.dataset.markup!==markup){target.innerHTML=markup;target.dataset.markup=markup}let objective=story.barracks?'Mission: Train fighters • Destroy the Crimson Keep':'Mission: Build Barracks • Train army • Destroy Crimson Keep';if(story.army)objective='Mission: March east and destroy the Crimson Keep';el('objective').textContent=objective;el('helpLine').textContent=placement?'Building mode: tap open grass near your base • Cancel to exit':entities.some(e=>e.type==='worker')?'Tap a 🌲 tree or 🪙 ore to gather • Drag map to pan • Tap to build':'Tap map to move • Tap enemy to attack • Use minimap to scout east';}
+const target=el('actions');const markup=acts.map(a=>`<button class="action ${a.extra||''}" data-action="${a.key}" ${a.disabled?'disabled':''}><span class="picture">${actionPicture(a)}</span><span class="title">${a.label}</span><span class="cost">${resourceCost(a.cost)}</span></button>`).join('');if(target.dataset.markup!==markup){target.innerHTML=markup;target.dataset.markup=markup}el('objective').textContent='⚔ Destroy the Crimson Keep';el('helpLine').textContent=placement?'Building mode: tap open grass near your base • Cancel to exit':entities.some(e=>e.type==='worker')?'Tap a 🌲 tree or 🪙 ore to gather • Drag map to pan • Tap to build':'Tap map to move • Tap enemy to attack • Use minimap to scout east';}
 function computeFog(){visible=Array.from({length:MH},()=>Array(MW).fill(false));const observers=[...units.filter(u=>u.team==='blue').map(u=>({x:u.x,y:u.y,r:u.type==='archer'?5.5:5})),...buildings.filter(b=>b.team==='blue').map(b=>({x:b.x+b.w/2,y:b.y+b.h/2,r:b.under?2.3:6.5}))];for(const o of observers){for(let y=Math.max(0,Math.floor(o.y-o.r));y<Math.min(MH,Math.ceil(o.y+o.r));y++)for(let x=Math.max(0,Math.floor(o.x-o.r));x<Math.min(MW,Math.ceil(o.x+o.r));x++){if(Math.hypot(x+.5-o.x,y+.5-o.y)<=o.r){visible[y][x]=true;explored[y][x]=true}}}}
 function tileVisible(x,y){return x>=0&&y>=0&&x<MW&&y<MH&&visible[y][x]}
 function strike(attacker, target, damage, ranged) {
@@ -466,30 +479,30 @@ function tileNearWater(x,y){for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){i
 let terrainCache;
 function paintTerrain(){
   const meadow = ctx.createLinearGradient(0, 0, MW*T, MH*T);
-  meadow.addColorStop(0, '#85ad6e');
-  meadow.addColorStop(.4, '#a1ba70');
-  meadow.addColorStop(.75, '#8eab65');
-  meadow.addColorStop(1, '#aeac6f');
+  meadow.addColorStop(0, '#799a35');
+  meadow.addColorStop(.4, '#94ac40');
+  meadow.addColorStop(.75, '#82a23d');
+  meadow.addColorStop(1, '#a3ac4c');
   rect(0,0,MW*T,MH*T,meadow);
+  // Paths lead from the keep gate onto the main lane and toward the ore.
+  ctx.save();
+  ctx.scale(T,T);
+  ctx.strokeStyle='#ebc585'; ctx.lineWidth=.55; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(6.5,12.8); ctx.bezierCurveTo(6.1,13.9,4.8,13.5,4.2,14.1);
+  ctx.moveTo(6.5,12.8); ctx.bezierCurveTo(8.1,12.1,8.5,10.7,11.4,10.8);
+  ctx.stroke(); ctx.restore();
   const left=0,right=MW,top=0,bottom=MH;
   for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){
     const tile=world[y][x],px=x*T,py=y*T,r=tile.rough;
     if(tile.water){
-      rect(px,py,T,T,r>.5?'#275f74':'#2b6b7c');
-      rect(px+1,py+1,T-2,8,'#347f90');
-      const drift=(x*5+y*3)%48;
-      rect(px+((drift+6)%32),py+10,12,2,'#7fc2c5');
-      rect(px+((drift+20)%34),py+26,9,2,'#95d1c4');
-      rect(px+((drift+30)%36),py+36,7,2,'#599ca2');
-      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-        const nx=x+dx,ny=y+dy;
-        if(nx>=0&&ny>=0&&nx<MW&&ny<MH&&!world[ny][nx].water){
-          if(dx===1)rect(px+T-4,py,4,T,'#9cbf88');
-          if(dx===-1)rect(px,py,4,T,'#9cbf88');
-          if(dy===1)rect(px,py+T-4,T,4,'#88ae78');
-          if(dy===-1)rect(px,py,T,4,'#aac990');
-        }
-      }
+      // Round exposed shoreline corners while joining adjacent water cells.
+      const water = (dx,dy) => world[y+dy]?.[x+dx]?.water;
+      const corners = [[-1,-1],[1,-1],[1,1],[-1,1]].map(([dx,dy]) =>
+        !water(dx,0) && !water(0,dy) ? T*.48 : 0);
+      ctx.beginPath(); ctx.roundRect(px,py,T+.2,T+.2,corners);
+      ctx.fillStyle='#217fa0'; ctx.fill();
+      if (!water(0,-1)) oval(px+T*.5,py+9,T*.24,1.6,'#72bfc2');
       continue;
     }
     if (tile.ridge) {
@@ -500,25 +513,23 @@ function paintTerrain(){
       continue;
     }
     const road = offset => (12.5 + 2*Math.sin((x+offset)/5))*T;
-    const west = road(0), east = road(1), half = T*.76;
+    const west = road(0), east = road(1), half = T*.47;
     if (py < Math.max(west,east)+half && py+T > Math.min(west,east)-half) {
       ctx.save();
       ctx.beginPath(); ctx.rect(px,py,T,T); ctx.clip();
-      poly([[px,west-half],[px+T,east-half],[px+T,east+half],[px,west+half]],'#caa877');
-      line(px,west+half-2,px+T,east+half-2,'#ab9066',3);
+      poly([[px,west-half],[px+T,east-half],[px+T,east+half],[px,west+half]],'#ebc585');
+      line(px,west+half-2,px+T,east+half-2,'#d7b87b',3);
       for (let i=0; i<5; i++) {
         const offset=rand(x,y,i+13), pebbleY=road(offset)+(rand(y,x,i+25)-.5)*half*1.8;
         oval(px+offset*T,pebbleY,2.8,1.1,'#e2c28c');
       }
       ctx.restore();
     }
-    if (r>.2) {
+    if (r>.87) {
       const gx=px+6+rand(x,y,4)*32, gy=py+9+rand(x,y,5)*30;
       poly([[gx-5,gy-4],[gx-1,gy-1],[gx,gy-8],[gx+2,gy-2],[gx+5,gy-5],[gx+3,gy]],'#719754');
     }
-    if(r>.38){rect(px+15,py+34,6,2,'#89aa63');rect(px+34,py+12,5,2,'#7fa056')}
-    if(r>.60){circle(px+11,py+26,1.2,'#d8cc88');circle(px+14,py+27,1,'#d39f7d');circle(px+38,py+7,1.1,'#e0dc9b')}
-    if(r>.83){rect(px+24,py+13,3,3,'#7a7a64');rect(px+26,py+15,4,3,'#92927a');rect(px+7,py+38,5,2,'#738d56')}
+
   }
 }
 function drawTerrain() {
@@ -550,12 +561,31 @@ const { buildingArt, resourceArt, unitArt } = createSprites(T, ctx, {
 });
 function drawHealth(e){
   let x,y,w;if(e.kind==='building'){x=e.x*T+6;y=e.y*T-12;w=e.w*T-12}else{x=e.x*T-14;y=e.y*T-34;w=28}
-  if(e.hp>=e.maxHp-.1&&!selected.includes(e.id))return;
+  if(e.hp>=e.maxHp-.1 && !selected.includes(e.id) && (e.kind==='building' || e.type==='worker'))return;
   rect(x,y,w,6,'#241817cc'); rect(x+1,y+1,w-2,4,'#55312d'); rect(x+1,y+1,(w-2)*clamp(e.hp/e.maxHp,0,1),4,e.team==='blue'?'#8be082':'#f18269');
   strokeRect(x,y,w,6,'#dbcda0',1);
 }
-function drawFog(){const left=Math.max(0,Math.floor(cam.x)-1),right=Math.min(MW,Math.ceil(cam.x+viewW/(T*scale))+2),top=Math.max(0,Math.floor(cam.y)-1),bottom=Math.min(MH,Math.ceil(cam.y+viewH/(T*scale))+2);for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){if(visible[y][x])continue;rect(x*T,y*T,T+1,T+1,explored[y][x]?'#082217aa':'#050c08f5');if(explored[y][x])rect(x*T,y*T,T,3,'#17312566')}}
-function drawSelection(){for(const e of selEntities()){let x=e.kind==='unit'?e.x*T:(e.x+e.w/2)*T,y=e.kind==='unit'?e.y*T:(e.y+e.h/2)*T,r=e.kind==='unit'?18:Math.max(e.w,e.h)*T*.48;ctx.strokeStyle='#f7e69a';ctx.lineWidth=2.6;ctx.setLineDash([8,4]);ctx.beginPath();ctx.ellipse(x,y+(e.kind==='unit'?10:15),r,r*.42,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.strokeStyle='#fff8c6';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(x,y+(e.kind==='unit'?10:15),r-4,r*.33,0,0,Math.PI*2);ctx.stroke()}}
+// One pixel per cell gives the fog a soft boundary at every camera zoom.
+let fogCanvas, paintedVisibility;
+function drawFog() {
+  if (!fogCanvas) {
+    fogCanvas = document.createElement('canvas');
+    fogCanvas.width = MW;
+    fogCanvas.height = MH;
+  }
+  if (paintedVisibility !== visible) {
+    const mask = fogCanvas.getContext('2d');
+    mask.clearRect(0, 0, MW, MH);
+    for (let y=0; y<MH; y++) for (let x=0; x<MW; x++) {
+      if (visible[y][x]) continue;
+      mask.fillStyle = explored[y][x] ? '#334c36a8' : '#263e35';
+      mask.fillRect(x,y,1,1);
+    }
+    paintedVisibility = visible;
+  }
+  ctx.drawImage(fogCanvas,0,0,MW*T,MH*T);
+}
+function drawSelection(){for(const e of selEntities()){let x=e.kind==='unit'?e.x*T:(e.x+e.w/2)*T,y=e.kind==='unit'?e.y*T:(e.y+e.h/2)*T,r=e.kind==='unit'?18:Math.max(e.w,e.h)*T*.48;ctx.strokeStyle='#f7e69a';ctx.lineWidth=2.6;ctx.setLineDash([]);ctx.beginPath();ctx.ellipse(x,y+(e.kind==='unit'?10:15),r,r*.42,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.strokeStyle='#fff8c6';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(x,y+(e.kind==='unit'?10:15),r-4,r*.33,0,0,Math.PI*2);ctx.stroke()}}
 function drawGhost(){if(!placement)return;let b=BT[placement.type],x=placement.x,y=placement.y,valid=canPlace(placement.type,x,y);ctx.fillStyle=valid?'#a7f0aa66':'#fa6d5d66';ctx.fillRect(x*T,y*T,b.w*T,b.h*T);ctx.strokeStyle=valid?'#e0ffd2':'#ffd0c1';ctx.lineWidth=3;ctx.strokeRect(x*T+1,y*T+1,b.w*T-2,b.h*T-2);for(let i=0;i<b.w*T+b.h*T;i+=10)line(x*T+i,y*T,x*T,y*T+i,valid?'#d7f8c3aa':'#ffc8bf99',1)}
 function drawEffects() {
   for (const fx of effects) {
