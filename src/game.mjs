@@ -133,6 +133,11 @@ function moveFormation(group, x, y, aggressive) {
 }
 function handleAction(action){if(gameState!=='playing')return;const sel=selEntities(),one=sel.length===1?sel[0]:null;if(action.startsWith('build:')){if(!sel.some(s=>s.kind==='unit'&&s.type==='worker'))return;placement={type:action.slice(6),x:Math.floor(cam.x+viewW/(2*T*scale)),y:Math.floor(cam.y+viewH/(2*T*scale))};updateUI();toast('Tap an empty nearby space to place the building');return}if(action.startsWith('train:')&&one?.kind==='building'){train(one,action.slice(6));return}if(action==='attackMove'){attackMove=!attackMove;updateUI();toast(attackMove?'Tap terrain to attack-move':'Attack-move cancelled');return}if(action==='stop'){sel.filter(s=>s.kind==='unit').forEach(u=>{u.path=[];u.order=null});toast('Units standing by')}if(action==='cancel'){placement=null;updateUI();toast('Placement cancelled')}if(action==='focus'){if(one)centerOn(...(one.kind==='building'?[one.x+one.w/2,one.y+one.h/2]:[one.x,one.y]))}}
 function toast(msg){toastText=msg;toastUntil=performance.now()+2700;el('toast').textContent=msg;el('toast').classList.add('show')}
+function actionPicture(action) {
+  const [verb, type] = action.key.split(':');
+  if (verb === 'train' || verb === 'build') return `<img alt="" src="./art/${type}.webp">`;
+  return action.icon;
+}
 function updateUI(){const entities=selEntities();el('gold').textContent=Math.floor(gold);el('wood').textContent=Math.floor(wood);el('pop').textContent=`${popUsed()}/${popMax()}`;
 let name='🌿 Your frontier awaits',status='Select a worker to harvest wood or ore.',health=100,one=entities.length===1?entities[0]:null;
 if(entities.length>1){name=`⚔️ ${entities.length} units selected`;status=`${entities.filter(u=>u.type==='worker').length} workers · ${entities.filter(u=>u.type!=='worker').length} fighters`;health=entities.reduce((sum,u)=>sum+u.hp/u.maxHp,0)/entities.length*100}
@@ -143,7 +148,7 @@ else if(!one&&entities.length===0){add('hint','Select units','👆','Tap on map'
 else if((one?.kind==='unit'&&one.type==='worker')||(entities.length>1&&entities.some(e=>e.type==='worker'))){for(const type of ['barracks','farm','tower','keep']){let b=BT[type];add('build:'+type,b.name,b.icon,`🪙${b.costG} 🪵${b.costW}`,!canAfford(b))}add('stop','Stop','✋','Hold position')}
 else if(one?.kind==='building'){if(one.type==='keep')add('train:worker','Worker','🧑‍🌾',`🪙${TYPES.worker.costG}`,one.under||popUsed()+1>popMax()||!canAfford(TYPES.worker));if(one.type==='barracks'){for(const type of ['guard','archer']){let t=TYPES[type];add('train:'+type,t.name,t.icon,`🪙${t.costG} 🪵${t.costW}`,one.under||popUsed()+t.food>popMax()||!canAfford(t))}}if(one.type==='farm')add('hint','Housing','🌾','+6 supply',true);if(one.type==='tower')add('hint','Defense','🎯','Auto attacks',true);if(one.under)add('hint','Building','🪚','Assign workers',true);add('focus','Center','🎯','Locate')}
 else{add('stop','Stop','✋','Hold position');add('attackMove','Attack move','⚔️','Tap destination',false,attackMove?'active':'')}
-const target=el('actions');const markup=acts.map(a=>`<button class="action ${a.extra||''}" data-action="${a.key}" ${a.disabled?'disabled':''}><span class="picture">${a.icon}</span><span class="title">${a.label}</span><span class="cost">${a.cost}</span></button>`).join('');if(target.dataset.markup!==markup){target.innerHTML=markup;target.dataset.markup=markup}let objective=story.barracks?'Mission: Train fighters • Destroy the Crimson Keep':'Mission: Build Barracks • Train army • Destroy Crimson Keep';if(story.army)objective='Mission: March east and destroy the Crimson Keep';el('objective').textContent=objective;el('helpLine').textContent=placement?'Building mode: tap open grass near your base • Cancel to exit':entities.some(e=>e.type==='worker')?'Tap a 🌲 tree or 🪙 ore to gather • Drag map to pan • Tap to build':'Tap map to move • Tap enemy to attack • Use minimap to scout east';}
+const target=el('actions');const markup=acts.map(a=>`<button class="action ${a.extra||''}" data-action="${a.key}" ${a.disabled?'disabled':''}><span class="picture">${actionPicture(a)}</span><span class="title">${a.label}</span><span class="cost">${a.cost}</span></button>`).join('');if(target.dataset.markup!==markup){target.innerHTML=markup;target.dataset.markup=markup}let objective=story.barracks?'Mission: Train fighters • Destroy the Crimson Keep':'Mission: Build Barracks • Train army • Destroy Crimson Keep';if(story.army)objective='Mission: March east and destroy the Crimson Keep';el('objective').textContent=objective;el('helpLine').textContent=placement?'Building mode: tap open grass near your base • Cancel to exit':entities.some(e=>e.type==='worker')?'Tap a 🌲 tree or 🪙 ore to gather • Drag map to pan • Tap to build':'Tap map to move • Tap enemy to attack • Use minimap to scout east';}
 function computeFog(){visible=Array.from({length:MH},()=>Array(MW).fill(false));const observers=[...units.filter(u=>u.team==='blue').map(u=>({x:u.x,y:u.y,r:u.type==='archer'?5.5:5})),...buildings.filter(b=>b.team==='blue').map(b=>({x:b.x+b.w/2,y:b.y+b.h/2,r:b.under?2.3:6.5}))];for(const o of observers){for(let y=Math.max(0,Math.floor(o.y-o.r));y<Math.min(MH,Math.ceil(o.y+o.r));y++)for(let x=Math.max(0,Math.floor(o.x-o.r));x<Math.min(MW,Math.ceil(o.x+o.r));x++){if(Math.hypot(x+.5-o.x,y+.5-o.y)<=o.r){visible[y][x]=true;explored[y][x]=true}}}}
 function tileVisible(x,y){return x>=0&&y>=0&&x<MW&&y<MH&&visible[y][x]}
 function strike(attacker, target, damage, ranged) {
@@ -460,7 +465,12 @@ function poly(points,fill,stroke=null,lw=1){if(!points.length)return;ctx.beginPa
 function tileNearWater(x,y){for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){if(!xx&&!yy)continue;let nx=x+xx,ny=y+yy;if(nx>=0&&ny>=0&&nx<MW&&ny<MH&&world[ny][nx].water)return true}return false}
 let terrainCache;
 function paintTerrain(){
-  rect(0,0,MW*T,MH*T,'#314934');
+  const meadow = ctx.createLinearGradient(0, 0, MW*T, MH*T);
+  meadow.addColorStop(0, '#85ad6e');
+  meadow.addColorStop(.4, '#a1ba70');
+  meadow.addColorStop(.75, '#8eab65');
+  meadow.addColorStop(1, '#aeac6f');
+  rect(0,0,MW*T,MH*T,meadow);
   const left=0,right=MW,top=0,bottom=MH;
   for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){
     const tile=world[y][x],px=x*T,py=y*T,r=tile.rough;
@@ -482,8 +492,6 @@ function paintTerrain(){
       }
       continue;
     }
-    const base=r>.78?'#56764a':r>.46?'#4a6c42':'#44633d';
-    rect(px,py,T,T,base);
     if (tile.ridge) {
       poly([[px,py+39],[px+16,py+7],[px+24,py+2],[px+45,py+37],[px+34,py+45],[px+11,py+46]], '#25312d');
       poly([[px+3,py+37],[px+19,py+7],[px+24,py+4],[px+26,py+24],[px+18,py+39]], '#8d9480');
@@ -491,12 +499,23 @@ function paintTerrain(){
       poly([[px+19,py+10],[px+24,py+4],[px+31,py+16],[px+26,py+14],[px+21,py+16]], '#c5cbb3');
       continue;
     }
-    if (Math.abs(y - (12 + 2 * Math.sin(x / 5))) < 1.45) {
-      rect(px,py+8,T,31,r>.5?'#7b7651':'#777350');
-      for (let i=0;i<8;i++) rect(px+rand(x,y,i+13)*44,py+8+rand(y,x,i+25)*31,3,2,'#a29669');
+    const road = offset => (12.5 + 2*Math.sin((x+offset)/5))*T;
+    const west = road(0), east = road(1), half = T*.76;
+    if (py < Math.max(west,east)+half && py+T > Math.min(west,east)-half) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(px,py,T,T); ctx.clip();
+      poly([[px,west-half],[px+T,east-half],[px+T,east+half],[px,west+half]],'#caa877');
+      line(px,west+half-2,px+T,east+half-2,'#ab9066',3);
+      for (let i=0; i<5; i++) {
+        const offset=rand(x,y,i+13), pebbleY=road(offset)+(rand(y,x,i+25)-.5)*half*1.8;
+        oval(px+offset*T,pebbleY,2.8,1.1,'#e2c28c');
+      }
+      ctx.restore();
     }
-    if(tileNearWater(x,y)) rect(px+2,py+2,T-4,T-4,'#00000010');
-    if(r>.12){rect(px+5+Math.floor(rand(x,y,4)*13),py+5+Math.floor(rand(x,y,5)*11),2,7,'#6d8f50');rect(px+30,py+23+Math.floor(rand(x,y,6)*7),2,5,'#2f5538')}
+    if (r>.2) {
+      const gx=px+6+rand(x,y,4)*32, gy=py+9+rand(x,y,5)*30;
+      poly([[gx-5,gy-4],[gx-1,gy-1],[gx,gy-8],[gx+2,gy-2],[gx+5,gy-5],[gx+3,gy]],'#719754');
+    }
     if(r>.38){rect(px+15,py+34,6,2,'#89aa63');rect(px+34,py+12,5,2,'#7fa056')}
     if(r>.60){circle(px+11,py+26,1.2,'#d8cc88');circle(px+14,py+27,1,'#d39f7d');circle(px+38,py+7,1.1,'#e0dc9b')}
     if(r>.83){rect(px+24,py+13,3,3,'#7a7a64');rect(px+26,py+15,4,3,'#92927a');rect(px+7,py+38,5,2,'#738d56')}
@@ -578,7 +597,7 @@ let lastMinimap = -Infinity;
 function render() {
   if (!viewW || !viewH) return;
   ctx.setTransform(devicePixel, 0, 0, devicePixel, 0, 0);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
   rect(0, 0, viewW, viewH, '#0a1812');
   ctx.save();
   ctx.scale(scale, scale);
