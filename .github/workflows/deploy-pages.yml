@@ -33,7 +33,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
-          cp -r src _site/
+          cp -r src art _site/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static game
