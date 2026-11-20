@@ -23,12 +23,23 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test match simulation
+        run: node --test tests/*.test.mjs
+      - name: Stage static game
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r src _site/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static game
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
