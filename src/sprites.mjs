@@ -1,5 +1,20 @@
 // Original canvas sprites. Geometry is kept in world pixels for crisp silhouettes.
 export function createSprites(T, ctx, { rect, oval, circle, poly, line, strokeRect }) {
+  const images = new Map();
+  for (const name of ['keep','crimson-keep','barracks','farm','tower','tree','pine','ore',
+    'worker','guard','archer','raider','shooter','crimson-worker','crimson-barracks','crimson-tower','crimson-farm']) {
+    if (typeof Image === "undefined") break;
+    const image = new Image();
+    image.onload = () => images.set(name, image);
+    image.src = new URL(`../art/${name}.webp`, import.meta.url);
+  }
+
+  // Fit each cutout inside its game footprint, anchored at the feet.
+  function paint(image, center, bottom, width, height) {
+    const scale = Math.min(width / image.width, height / image.height);
+    const w = image.width * scale, h = image.height * scale;
+    ctx.drawImage(image, center - w / 2, bottom - h, w, h);
+  }
   function buildingArt(b){
     const x=b.x*T,y=b.y*T,w=b.w*T,h=b.h*T,blue=b.team==='blue';
     const wall=blue?'#b8b59c':'#ab9085',wallDark=blue?'#7f7a66':'#7a6058',roof=blue?'#3d6474':'#7c3e43',roofLite=blue?'#628f9a':'#ba6760',flag=blue?'#bdeedc':'#ff9d8d';
@@ -12,6 +27,11 @@ export function createSprites(T, ctx, { rect, oval, circle, poly, line, strokeRe
       rect(x+6,y+h-10,w-12,6,'#3f2c1f');
       rect(x+6,y+h-10,Math.max(0,(w-12)*b.progress),6,'#efd491');
       strokeRect(x+4,y+8,w-8,h-12,'#e1c286',2);
+      return;
+    }
+    const image = images.get(blue ? b.type : 'crimson-' + b.type);
+    if (image) {
+      paint(image, x+w/2, y+h+2, w+4, h+10);
       return;
     }
     if (b.type === 'keep' && !blue) {
@@ -79,6 +99,13 @@ export function createSprites(T, ctx, { rect, oval, circle, poly, line, strokeRe
   }
   function resourceArt(n){
     const x=n.x*T,y=n.y*T;
+    const name = n.type === 'tree' ? ((n.x*3+n.y)%4 ? 'tree' : 'pine') : 'ore';
+    const image = images.get(name);
+    if (image) {
+      oval(x+25,y+42,18,5,'#233d3555');
+      paint(image,x+T/2,y+T-2,T+3,name === 'ore' ? T-7 : T+11);
+      return;
+    }
     if(n.type==='tree'){
       oval(x+24,y+42,17,6,'#12261888');
       rect(x+21,y+24,8,18,'#775230'); rect(x+23,y+18,4,27,'#8f673d');
@@ -106,6 +133,16 @@ export function createSprites(T, ctx, { rect, oval, circle, poly, line, strokeRe
     const x=u.x*T,y=u.y*T,blue=u.team==='blue',color=blue?'#5ea8b4':'#bf5b50',dark=blue?'#2f5862':'#6f3438',trim=blue?'#caeee4':'#ffcab5',step=u.path.length?Math.sin(gameTime*13+u.wobble):0,face=u.team==='blue'?'#dec0a0':'#d7ae95';
     ctx.save(); ctx.translate(Math.round(x),Math.round(y)); ctx.scale(u.facing || 1,1); ctx.translate(0,u.path.length?Math.sin(gameTime*10+u.wobble)*1.3:0);
     oval(0,16,13,5,'#11211788');
+    const image = images.get(!blue && u.type === 'worker' ? 'crimson-worker' : u.type);
+    if (image) {
+      const working = u.order?.stage === 'mining' || (u.order?.kind === 'build' && !u.path.length);
+      const strike = u.swing > gameTime ? Math.sin(Math.PI*(u.swing-gameTime)/.28) : 0;
+      ctx.rotate(strike*.22 + (working ? Math.sin(gameTime*8+u.wobble)*.12 : step*.035));
+      paint(image,0,17,42,48);
+      if (u.carry) paint(images.get(u.carryType === 'tree' ? 'tree' : 'ore') || image,-10,-15,13,13);
+      ctx.restore();
+      return;
+    }
     rect(-7,5+Math.max(0,step*1.5),4,11,'#4c3b30'); rect(3,5+Math.max(0,-step*1.5),4,11,'#44352c');
     if(u.type==='worker'){
       rect(-8,-7,16,15,'#b48f62'); rect(-7,-5,14,11,'#d2ad76'); rect(-6,-17,12,11,face); rect(-8,-21,16,6,'#85623b');
