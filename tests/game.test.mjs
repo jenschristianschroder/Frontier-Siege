@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { route, footprintDistance, formationSlots } from '../src/navigation.mjs';
 import { storeMatch, readMatch, removeMatch } from '../src/save.mjs';
-import { createSprites } from "../src/sprites.mjs";
+import { createSprites } from '../src/sprites.mjs';
 
 const source = readFileSync(new URL('../src/game.mjs', import.meta.url), 'utf8')
   .replace(/^import .*;\n/gm, '');
@@ -127,4 +127,38 @@ test('a direct assault resolves victory and an ignored enemy can win', () => {
   const unattended = match();
   unattended.advance(620);
   assert.equal(unattended.state().gameState, 'lost');
+});
+
+test('recruit and win using the starting settlement', () => {
+  const game = match();
+  const state = game.state();
+  const workers = state.units.filter(u => u.team === 'blue' && u.type === 'worker');
+  const send = (worker, type, x, y) => game.orderHarvest(worker,
+    state.nodes.find(n => n.type === type && n.x === x && n.y === y));
+  const build = (type, x, y) => {
+    game.selectOne(workers[2]);
+    game.handleAction('build:' + type);
+    game.buildPlace(x, y);
+    game.advance(12);
+    assert.ok(game.state().buildings.some(b => b.team === 'blue' && b.type === type && b.x === x && !b.under));
+  };
+  send(workers[0],'tree',3,8);
+  send(workers[1],'gold',11,10);
+  build('barracks',5,15);
+  build('farm',7,8);
+  build('tower',10,13);
+  build('tower',10,14);
+  build('farm',5,7);
+  const barracks = game.state().buildings.find(b=>b.team==='blue' && b.type==='barracks');
+  for (let i=0;i<18;i++) {
+    game.train(barracks,i%3===0?'guard':'archer');
+    game.advance(9);
+  }
+  const army = game.state().units.filter(u => u.team === 'blue' && u.type !== 'worker');
+  game.moveFormation(army,25,14,true);
+  game.advance(25);
+  const target = game.findKeep('red');
+  if (target) for (const u of army.filter(u => u.hp > 0)) game.orderAttack(u, target);
+  game.advance(40);
+  assert.equal(game.state().gameState, 'won');
 });
