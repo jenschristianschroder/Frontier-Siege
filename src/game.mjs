@@ -107,7 +107,31 @@ function spendRed(t) {
   return true;
 }
 function findSpawn(b){let cx=b.x+b.w/2,cy=b.y+b.h/2;for(let r=1;r<7;r++)for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++){if(Math.abs(dx)!==r&&Math.abs(dy)!==r)continue;let x=Math.floor(cx+dx),y=Math.floor(cy+dy);if(!isBlocked(x,y)&&!units.some(u=>Math.hypot(u.x-x-.5,u.y-y-.5)<.65))return{x:x+.5,y:y+.5}}return null}
-function cellHit(wx,wy){for(let i=units.length-1;i>=0;i--){let u=units[i];if(u.team==='red'&&!tileVisible(Math.floor(u.x),Math.floor(u.y)))continue;if(Math.hypot(wx-u.x,wy-u.y)<.55)return u}for(let i=buildings.length-1;i>=0;i--){let b=buildings[i];if(b.team==='red'&&!tileVisible(Math.floor(b.x+b.w/2),Math.floor(b.y+b.h/2)))continue;if(wx>=b.x&&wx<b.x+b.w&&wy>=b.y&&wy<b.y+b.h)return b}return tileVisible(Math.floor(wx),Math.floor(wy)) ? nodes.find(n=>n.amount>0&&Math.floor(wx)===n.x&&Math.floor(wy)===n.y) : null}
+function cellHit(wx, wy) {
+  let hit = null;
+  let front = -Infinity;
+  // Match the sprite painter's back-to-front order, including ties.
+  for (const group of [buildings, units]) {
+    for (const e of group) {
+      const center = targetPoint(e);
+      if (e.team === 'red' && !tileVisible(Math.floor(center.x), Math.floor(center.y))) continue;
+      const dx = (wx - e.x) * T, dy = (wy - e.y) * T;
+      const inside = e.kind === 'unit'
+        ? Math.abs(dx) <= 21 && dy >= -31 && dy <= 17
+        : e.under
+          ? dx >= 0 && dx < e.w * T && dy >= 0 && dy < e.h * T
+          : dx >= -2 && dx <= e.w * T + 2 && dy >= -8 && dy <= e.h * T + 2;
+      const depth = e.y + (e.h || 0);
+      if (inside && depth >= front) {
+        front = depth;
+        hit = e;
+      }
+    }
+  }
+  return hit || (tileVisible(Math.floor(wx), Math.floor(wy))
+    ? nodes.find(n => n.amount > 0 && Math.floor(wx) === n.x && Math.floor(wy) === n.y)
+    : null);
+}
 function tapWorld(px,py){if(gameState!=='playing')return;const wx=cam.x+px/(T*scale),wy=cam.y+py/(T*scale);if(placement){buildPlace(Math.floor(wx),Math.floor(wy));return}unlockAudio();playSound('order');const hit=cellHit(wx,wy),selectedEnt=selEntities(),fighters=selectedEnt.filter(e=>e.kind==='unit'),workers=fighters.filter(u=>u.type==='worker');if(hit&&hit.team==='blue'){if(hit.kind==='building'&&hit.under&&workers.length){workers.forEach(u=>orderBuild(u,hit));toast('Workers assigned to construction');return}selectOne(hit);return}
 if(!selectedEnt.length){if(hit&&hit.team==='red')toast('Choose your army to attack enemies');else toast('Tap one of your units to select it');return}
 if(hit&&hit.team==='red'){if(!fighters.length){toast('Select a fighting unit to attack');return}fighters.forEach(u=>orderAttack(u,hit));toast(`Attacking ${hit.type==='keep'?'Crimson Keep':BT[hit.type]?.name||TYPES[hit.type]?.name||'enemy'}!`);return}
@@ -682,7 +706,7 @@ function render() {
 function drawMinimap(){const w=mini.width,h=mini.height,cx=w/MW,cy=h/MH;mc.fillStyle='#1a3023';mc.fillRect(0,0,w,h);for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){mc.fillStyle=!explored[y]?.[x]?'#07160f':world[y]?.[x]?.water?'#2f7385':visible[y]?.[x]?'#6e8c55':'#39553c';mc.fillRect(x*cx,y*cy,Math.ceil(cx),Math.ceil(cy))}for(const n of nodes)if(explored[n.y]?.[n.x]){mc.fillStyle=n.type==='tree'?'#98b85a':'#e8c16d';mc.fillRect(n.x*cx,n.y*cy,Math.max(2,cx*1.1),Math.max(2,cy*1.1))}for(const b of buildings)if(b.team==='blue'||tileVisible(Math.floor(b.x+b.w/2),Math.floor(b.y+b.h/2))){mc.fillStyle=b.team==='blue'?'#8fdad0':'#e88473';mc.fillRect(b.x*cx,b.y*cy,b.w*cx,b.h*cy)}for(const u of units)if(u.team==='blue'||tileVisible(Math.floor(u.x),Math.floor(u.y))){mc.fillStyle=u.team==='blue'?'#d2fff2':'#ff9b80';mc.fillRect(u.x*cx-1,u.y*cy-1,3.5,3.5)}mc.strokeStyle='#f5e3a1';mc.lineWidth=2;mc.strokeRect(cam.x*cx,cam.y*cy,viewW/(T*scale)*cx,viewH/(T*scale)*cy);mc.strokeStyle='#7e8c63';mc.strokeRect(1,1,w-2,h-2)}
 function resize(){const rect=area.getBoundingClientRect();viewW=rect.width;viewH=rect.height;devicePixel=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.max(1,Math.round(viewW*devicePixel));canvas.height=Math.max(1,Math.round(viewH*devicePixel));clampCam();render()}
 function frame(ts){let dt=lastFrame?Math.min(.06,(ts-lastFrame)/1000):0;lastFrame=ts;update(dt);render();requestAnimationFrame(frame)}
-function screenPoint(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+function screenPoint(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*viewW/r.width,y:(e.clientY-r.top)*viewH/r.height}}
 const touches = new Map();
 let pinch;
 let boxMode = false;
