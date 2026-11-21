@@ -162,3 +162,11 @@ test('recruit and win using the starting settlement', () => {
   game.advance(40);
   assert.equal(game.state().gameState, 'won');
 });
+
+test('taps hit unit heads and roofs in sprite draw order', () => {
+  const game = match();
+  const tower = game.building('blue', 'tower', 18, 14);
+  assert.equal(game.cellHit(18.5, 14 - 6 / 48), tower);
+  const guard = game.unit('blue', 'guard', 18.5, 15.2);
+  assert.equal(game.cellHit(18.5, guard.y - 30 / 48), guard);
+});
